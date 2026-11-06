@@ -1,0 +1,18 @@
+{
+  "typst": {
+    "url": "https://github.com/typst/typst/releases/download/v0.15.1/typst-x86_64-pc-windows-msvc.zip",
+    "sha256": "19ce3551153c2fe7ee9fa2f95208310c8f4d3209fedb699e0333faf8913f6736"
+  },
+  "liblouis": {
+    "url": "https://github.com/liblouis/liblouis/releases/download/v3.39.0/liblouis-3.39.0-win64.zip",
+    "sha256": "64d669ac30f1411e0023b1cecc81c7a7b5374678ee41302c95ac8c7c8fbc6591"
+  },
+  "liblouis-source": {
+    "url": "https://github.com/liblouis/liblouis/releases/download/v3.39.0/liblouis-3.39.0.zip",
+    "sha256": "add5f7edb647dda50197c5d419918a77cea7443d671fd8af51dba1d250e33c51"
+  },
+  "inno": {
+    "url": "https://github.com/jrsoftware/issrc/releases/download/is-7_1_1/innosetup-7.1.1-x64.exe",
+    "sha256": "8a5a6711c3766a6e5fb74f280ba0e3551e719ce94538d901fdbd1f8f9920b3f0"
+  }
+}
