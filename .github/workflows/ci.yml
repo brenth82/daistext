@@ -24,6 +24,7 @@ jobs:
             dist/DaisText.exe
             dist/daistext-cli.exe
             dist/README.md
+            dist/LICENSE
             dist/THIRD-PARTY-NOTICES.md
             dist/tools/
             dist/liblouis/

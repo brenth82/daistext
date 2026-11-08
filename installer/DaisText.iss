@@ -41,6 +41,7 @@ Source: "..\dist\daistext-cli.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\tools\*"; DestDir: "{app}\tools"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\dist\liblouis\*"; DestDir: "{app}\tools\liblouis"; Components: liblouis; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\dist\README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 [Icons]
 Name: "{group}\DaisText"; Filename: "{app}\DaisText.exe"

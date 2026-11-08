@@ -23,30 +23,10 @@ import (
 
 var version = "0.1.0"
 
-type sectionsModel struct {
-	walk.TableModelBase
-	book    *daisy.Book
-	checked []bool
-}
-
-func (m *sectionsModel) RowCount() int { return len(m.book.Sections) }
-func (m *sectionsModel) Value(row, col int) interface{} {
-	s := m.book.Sections[row]
-	if col == 0 {
-		return strings.Repeat("    ", s.Depth) + s.Title
-	}
-	return len(s.Blocks)
-}
-func (m *sectionsModel) Checked(i int) bool { return m.checked[i] }
-func (m *sectionsModel) SetChecked(i int, v bool) error {
-	m.checked[i] = v
-	m.PublishRowChanged(i)
-	return nil
-}
-
 type app struct {
 	mw                                         *walk.MainWindow
-	table                                      *walk.TableView
+	tree                                       *walk.TreeView
+	reporterCleanup                            *walk.CheckBox
 	preview                                    *walk.TextEdit
 	bookPanel                                  *walk.Composite
 	welcome                                    *walk.Label
@@ -77,13 +57,21 @@ func main() {
 	defer a.cancel()
 	s, loadErr := settings.Load()
 	a.settings = s
-	err := (MainWindow{AssignTo: &a.mw, Title: "DaisText " + version, MinSize: Size{Width: 720, Height: 200}, Size: Size{Width: 920, Height: 250}, Layout: VBox{}, Children: []Widget{
-		Composite{Layout: HBox{}, Children: []Widget{PushButton{AssignTo: &a.open, Text: "Open DAISY &folder…", Visible: s.ShowFolderImport, OnClicked: a.openFolder}, PushButton{AssignTo: &a.openZIP, Text: "Open &ZIP…", Visible: s.ShowZIPImport, OnClicked: a.openBook}, PushButton{AssignTo: &a.preferences, Text: "&Settings…", OnClicked: a.editSettings}, PushButton{AssignTo: &a.check, Text: "Check for &updates…", OnClicked: func() { a.checkUpdates(true) }}, HSpacer{}}},
+	err := (MainWindow{AssignTo: &a.mw, Title: "DaisText", MinSize: Size{Width: 720, Height: 200}, Size: Size{Width: 920, Height: 250}, Layout: VBox{}, Children: []Widget{
+		Composite{Layout: HBox{}, Children: []Widget{
+			PushButton{AssignTo: &a.open, Text: "Open DAISY &folder…", Visible: s.ShowFolderImport, OnClicked: a.openFolder},
+			PushButton{AssignTo: &a.openZIP, Text: "Open &ZIP…", Visible: s.ShowZIPImport, OnClicked: a.openBook},
+			PushButton{AssignTo: &a.preferences, Text: "&Settings…", OnClicked: a.editSettings},
+			PushButton{AssignTo: &a.check, Text: "Check for &updates…", OnClicked: func() { a.checkUpdates(true) }},
+			PushButton{Text: "Abou&t…", OnClicked: a.showAbout},
+			HSpacer{},
+		}},
 		Label{AssignTo: &a.welcome, Text: "Open a DAISY folder or ZIP to select sections and convert them.\r\nFor newspaper emails with separate attachments, save the OPF, NCX, SMIL and XML files together in one folder.\r\nYou can hide either Open option in Settings. Converted files default to your Downloads folder."},
 		Composite{AssignTo: &a.bookPanel, Visible: false, Layout: VBox{}, StretchFactor: 1, Children: []Widget{
-			Label{Text: "&Sections in reading order (Space toggles a checkbox):"},
-			TableView{AssignTo: &a.table, Accessibility: Accessibility{Name: "Sections in reading order", Description: "Space toggles inclusion. Use Toggle selected branch to include or omit descendants."}, CheckBoxes: true, Columns: []TableViewColumn{{Title: "Section", Width: 760}, {Title: "Text blocks", Width: 90}}, OnCurrentIndexChanged: func() { a.showPreview() }, StretchFactor: 3},
+			Label{Text: "&Sections (Right and Left expand or collapse, Space toggles inclusion)"},
+			TreeView{AssignTo: &a.tree, Accessibility: Accessibility{Name: "Sections in reading order", Description: "Right and Left expand or collapse branches. Space toggles inclusion."}, OnCurrentItemChanged: a.showPreview, StretchFactor: 3},
 			Composite{Layout: HBox{}, Children: []Widget{PushButton{Text: "Select &all", OnClicked: func() { a.selectAll(true) }}, PushButton{Text: "Select &none", OnClicked: func() { a.selectAll(false) }}, PushButton{Text: "Toggle selected &branch", OnClicked: a.toggleBranch}, HSpacer{}}},
+			CheckBox{AssignTo: &a.reporterCleanup, Text: "Skip &reporter contact details and bios", Visible: false, OnCheckedChanged: a.showPreview},
 			Label{Text: "&Preview of highlighted section:"}, TextEdit{AssignTo: &a.preview, Accessibility: Accessibility{Name: "Section preview"}, ReadOnly: true, VScroll: true, StretchFactor: 2},
 			Composite{Layout: HBox{}, Children: []Widget{Label{Text: "Output &format:"}, ComboBox{AssignTo: &a.format, Accessibility: Accessibility{Name: "Output format"}, Model: formats, CurrentIndex: 0}, PushButton{AssignTo: &a.convert, Text: "&Convert selected…", Enabled: false, OnClicked: a.convertBook}, HSpacer{}}},
 		}},
@@ -93,6 +81,7 @@ func main() {
 		walk.MsgBox(nil, "DaisText", err.Error(), walk.MsgBoxIconError)
 		return
 	}
+	enableSectionCheckboxes(a.tree)
 	for i, f := range formats {
 		if f == s.Format {
 			a.format.SetCurrentIndex(i)
@@ -131,6 +120,15 @@ func (a *app) startWorker(work func()) {
 func (a *app) failure(e error) {
 	walk.MsgBox(a.mw, "DaisText", e.Error(), walk.MsgBoxOK|walk.MsgBoxIconError)
 }
+
+func (a *app) showAbout() {
+	message := "DaisText version " + version + "\r\n\r\n" +
+		"Convert selected sections of DAISY books and newspapers.\r\n\r\n" +
+		"Copyright © 2026 Brent Harding\r\n" +
+		"Licensed under the MIT License. Bundled tools have their own licenses.\r\n\r\n" +
+		"https://github.com/brenth82/daistext"
+	walk.MsgBox(a.mw, "About DaisText", message, walk.MsgBoxOK|walk.MsgBoxIconInformation)
+}
 func (a *app) setBusy(v bool, message string) {
 	a.busy = v
 	a.open.SetEnabled(!v)
@@ -138,7 +136,8 @@ func (a *app) setBusy(v bool, message string) {
 	a.preferences.SetEnabled(!v)
 	a.check.SetEnabled(!v)
 	a.convert.SetEnabled(!v && a.model != nil)
-	a.table.SetEnabled(!v)
+	a.tree.SetEnabled(!v)
+	a.reporterCleanup.SetEnabled(!v)
 	a.status.SetText(message)
 }
 func (a *app) background(message string, work func() error, done func()) {
@@ -184,23 +183,29 @@ func (a *app) load(p string) {
 	var b *daisy.Book
 	a.background("Reading DAISY navigation and text…", func() error { var e error; b, e = daisy.Open(p); return e }, func() {
 		firstLoad := a.model == nil
-		m := &sectionsModel{book: b, checked: make([]bool, len(b.Sections))}
-		for i := range m.checked {
-			m.checked[i] = true
+		m := newSectionsModel(b)
+		a.model = nil
+		if err := m.attach(a.tree); err != nil {
+			a.bookPanel.SetVisible(false)
+			a.welcome.SetVisible(true)
+			a.convert.SetEnabled(false)
+			a.failure(err)
+			return
 		}
 		a.model = m
+		a.reporterCleanup.SetChecked(false)
+		a.reporterCleanup.SetVisible(b.Newspaper)
 		a.welcome.SetVisible(false)
 		a.bookPanel.SetVisible(true)
 		if firstLoad {
 			a.mw.SetMinMaxSize(walk.Size{Width: 720, Height: 540}, walk.Size{})
 			a.mw.SetSize(walk.Size{Width: 1000, Height: 760})
 		}
-		a.table.SetModel(m)
 		a.convert.SetEnabled(true)
 		a.mw.SetTitle(b.Title + " — DaisText")
 		a.status.SetText(fmt.Sprintf("%d sections loaded. Uncheck sections to omit them. Parent checkboxes control only their own text; use Toggle selected branch for descendants.", len(b.Sections)))
 		if len(b.Sections) > 0 {
-			a.table.SetCurrentIndex(0)
+			a.tree.SetCurrentItem(m.roots[0])
 			a.showPreview()
 		}
 	})
@@ -209,9 +214,9 @@ func (a *app) showPreview() {
 	if a.model == nil {
 		return
 	}
-	i := a.table.CurrentIndex()
-	if i >= 0 && i < a.model.RowCount() {
-		text := export.Text(a.model.book.Sections[i].Blocks)
+	item, ok := a.tree.CurrentItem().(*sectionItem)
+	if ok {
+		text := export.Text(a.model.book.SectionBlocks(item.index, a.reporterCleanup.Checked()))
 		if len(text) > 100000 {
 			text = text[:100000] + "\r\n[Preview shortened]"
 		}
@@ -222,38 +227,37 @@ func (a *app) selectAll(v bool) {
 	if a.model == nil {
 		return
 	}
-	for i := range a.model.checked {
-		a.model.checked[i] = v
+	for i := range a.model.handles {
+		a.model.setChecked(a.tree, i, v)
 	}
-	a.model.PublishRowsReset()
 }
 func (a *app) toggleBranch() {
 	if a.model == nil {
 		return
 	}
-	i := a.table.CurrentIndex()
-	if i < 0 {
+	item, ok := a.tree.CurrentItem().(*sectionItem)
+	if !ok {
 		return
 	}
+	i := item.index
 	depth := a.model.book.Sections[i].Depth
-	v := !a.model.checked[i]
-	a.model.checked[i] = v
-	for j := i + 1; j < len(a.model.checked) && a.model.book.Sections[j].Depth > depth; j++ {
-		a.model.checked[j] = v
+	v := !a.model.checked(a.tree, i)
+	a.model.setChecked(a.tree, i, v)
+	for j := i + 1; j < len(a.model.handles) && a.model.book.Sections[j].Depth > depth; j++ {
+		a.model.setChecked(a.tree, j, v)
 	}
-	a.model.PublishRowsReset()
 }
 func (a *app) convertBook() {
 	if a.model == nil {
 		return
 	}
 	var ids []int
-	for i, v := range a.model.checked {
-		if v {
+	for i := range a.model.handles {
+		if a.model.checked(a.tree, i) {
 			ids = append(ids, i)
 		}
 	}
-	blocks, e := a.model.book.Selected(ids)
+	blocks, e := a.model.book.SelectedForExport(ids, a.reporterCleanup.Checked())
 	if e != nil {
 		a.failure(e)
 		return

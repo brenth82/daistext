@@ -3,6 +3,10 @@
 A native Windows DAISY-to-text converter written in Go. Windows 10/11 x64;
 ARM64 Windows can use x64 emulation. Document conversion happens locally.
 
+DaisText source and documentation are available under the [MIT License](LICENSE).
+Bundled tools and dependencies retain the licenses listed in
+[Third-party notices](THIRD-PARTY-NOTICES.md). **About** shows the running version.
+
 ## Use
 
 Install `DaisText-Setup.exe`, then open DaisText from the Start menu. The installer

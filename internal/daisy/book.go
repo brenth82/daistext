@@ -27,14 +27,16 @@ type Block struct {
 
 // Each section owns only its own blocks. Parent selections never duplicate children.
 type Section struct {
-	Title  string
-	Depth  int
-	Blocks []Block
+	Title   string
+	Depth   int
+	Blocks  []Block
+	article bool
 }
 type Book struct {
 	Title, Language string
 	Sections        []Section
 	Warnings        []string
+	Newspaper       bool
 }
 type node struct {
 	tag      string
@@ -273,6 +275,7 @@ func blocks(n *node) []Block {
 type nav struct {
 	title, ref string
 	depth      int
+	article    bool
 }
 
 func Open(filename string) (*Book, error) {
@@ -343,7 +346,7 @@ func Open(filename string) (*Book, error) {
 							if err != nil {
 								return err
 							}
-							navigation = append(navigation, nav{label[0].content(), f + "#" + id, depth})
+							navigation = append(navigation, nav{label[0].content(), f + "#" + id, depth, strings.EqualFold(n.attrs["class"], "article")})
 						}
 					}
 					depth++
@@ -378,7 +381,7 @@ func Open(filename string) (*Book, error) {
 					if e != nil {
 						return e
 					}
-					navigation = append(navigation, nav{n.content(), f + "#" + id, int(n.tag[1] - '1')})
+					navigation = append(navigation, nav{n.content(), f + "#" + id, int(n.tag[1] - '1'), strings.EqualFold(n.attrs["class"], "article")})
 					if len(smils) == 0 || smils[len(smils)-1] != f {
 						smils = append(smils, f)
 					}
@@ -501,7 +504,7 @@ func Open(filename string) (*Book, error) {
 	}
 	sort.SliceStable(bounds, func(i, j int) bool { return bounds[i].start < bounds[j].start })
 	if len(bounds) == 0 || bounds[0].start > 0 {
-		b.Sections = append(b.Sections, Section{"Front matter", 0, append([]Block(nil), timeline[:func() int {
+		b.Sections = append(b.Sections, Section{Title: "Front matter", Blocks: append([]Block(nil), timeline[:func() int {
 			if len(bounds) > 0 {
 				return bounds[0].start
 			}
@@ -513,7 +516,14 @@ func Open(filename string) (*Book, error) {
 		if i+1 < len(bounds) {
 			end = bounds[i+1].start
 		}
-		b.Sections = append(b.Sections, Section{n.title, n.depth, append([]Block(nil), timeline[n.start:end]...)})
+		b.Sections = append(b.Sections, Section{Title: n.title, Depth: n.depth, Blocks: append([]Block(nil), timeline[n.start:end]...), article: n.article})
+	}
+	for _, document := range a.parsed {
+		for _, meta := range document.all("meta") {
+			if strings.EqualFold(meta.attrs["name"], "Publication.Type") && strings.EqualFold(strings.TrimSpace(meta.attrs["content"]), "Newspaper") {
+				b.Newspaper = true
+			}
+		}
 	}
 	if b.Title == "" {
 		b.Title = strings.TrimSuffix(path.Base(filename), path.Ext(filename))
@@ -522,6 +532,10 @@ func Open(filename string) (*Book, error) {
 }
 
 func (b *Book) Selected(indices []int) ([]Block, error) {
+	return b.SelectedForExport(indices, false)
+}
+
+func (b *Book) SelectedForExport(indices []int, skipReporterDetails bool) ([]Block, error) {
 	chosen := map[int]bool{}
 	for _, i := range indices {
 		if i < 0 || i >= len(b.Sections) {
@@ -530,9 +544,9 @@ func (b *Book) Selected(indices []int) ([]Block, error) {
 		chosen[i] = true
 	}
 	var out []Block
-	for i, s := range b.Sections {
+	for i := range b.Sections {
 		if chosen[i] {
-			out = append(out, s.Blocks...)
+			out = append(out, b.SectionBlocks(i, skipReporterDetails)...)
 		}
 	}
 	if len(out) == 0 {

@@ -39,7 +39,7 @@ if ($WithTools) {
     Copy-Item .tools/liblouis/* dist/liblouis -Recurse -Force
     Copy-Item .tools/liblouis-source.zip dist/liblouis/source/liblouis-3.39.0.zip -Force
 }
-Copy-Item README.md,THIRD-PARTY-NOTICES.md dist -Force
+Copy-Item README.md,LICENSE,THIRD-PARTY-NOTICES.md dist -Force
 $licenseDir = Join-Path $PWD 'dist/tools/licenses'
 New-Item -ItemType Directory -Force $licenseDir | Out-Null
 $moduleDirs = go list -m -f '{{.Dir}}' all
