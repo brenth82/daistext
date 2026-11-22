@@ -36,13 +36,15 @@ Name: "liblouis"; Description: "Liblouis braille translator and tables (offline 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 [Files]
+Source: "..\dist\typst-files.txt"; Flags: dontcopy
+Source: "..\dist\liblouis-files.txt"; Flags: dontcopy
 Source: "..\dist\DaisText.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\daistext-cli.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\dist\tools\*"; DestDir: "{app}\tools"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\dist\liblouis\*"; DestDir: "{app}\tools\liblouis"; Components: liblouis; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\dist\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\tools\*"; DestDir: "{app}\tools"; Check: NeedsTypst; Flags: ignoreversion recursesubdirs createallsubdirs solidbreak
+Source: "..\dist\liblouis\*"; DestDir: "{app}\tools\liblouis"; Components: liblouis; Check: NeedsLiblouis; Flags: ignoreversion recursesubdirs createallsubdirs solidbreak
 [Icons]
 Name: "{group}\DaisText"; Filename: "{app}\DaisText.exe"
 Name: "{group}\Uninstall DaisText"; Filename: "{uninstallexe}"
@@ -61,6 +63,65 @@ Type: filesandordirs; Name: "{localappdata}\DaisText\temp"
 Type: dirifempty; Name: "{localappdata}\DaisText"
 
 [Code]
+var
+  CheckedTypstDir, CheckedLiblouisDir: String;
+  InstallTypst, InstallLiblouis: Boolean;
+
+function ToolFilesMatch(const Dir, Manifest: String): Boolean;
+var
+  Entries: TArrayOfString;
+  ManifestPath, Filename, Entry: String;
+  I: Integer;
+begin
+  Result := False;
+  if not DirExists(Dir) then
+    Exit;
+  ManifestPath := ExpandConstant('{tmp}\') + Manifest;
+  if not FileExists(ManifestPath) then
+    ExtractTemporaryFile(Manifest);
+  if not LoadStringsFromFile(ManifestPath, Entries) or (GetArrayLength(Entries) = 0) then
+    Exit;
+  for I := 0 to GetArrayLength(Entries) - 1 do begin
+    Entry := Entries[I];
+    Filename := AddBackslash(Dir) + Copy(Entry, 66, Length(Entry));
+    if not FileExists(Filename) then
+      Exit;
+    try
+      if CompareText(GetSHA256OfFile(Filename), Copy(Entry, 1, 64)) <> 0 then
+        Exit;
+    except
+      Log('Could not verify ' + Filename + ': ' + GetExceptionMessage);
+      Exit;
+    end;
+  end;
+  Result := True;
+  Log('Reusing matching bundled files in ' + Dir);
+end;
+
+function NeedsTypst: Boolean;
+var
+  Dir: String;
+begin
+  Dir := ExpandConstant('{app}\tools');
+  if CheckedTypstDir <> Dir then begin
+    InstallTypst := not ToolFilesMatch(Dir, 'typst-files.txt');
+    CheckedTypstDir := Dir;
+  end;
+  Result := InstallTypst;
+end;
+
+function NeedsLiblouis: Boolean;
+var
+  Dir: String;
+begin
+  Dir := ExpandConstant('{app}\tools\liblouis');
+  if CheckedLiblouisDir <> Dir then begin
+    InstallLiblouis := not ToolFilesMatch(Dir, 'liblouis-files.txt');
+    CheckedLiblouisDir := Dir;
+  end;
+  Result := InstallLiblouis;
+end;
+
 function IsUpdate: Boolean;
 begin
   Result := ExpandConstant('{param:DAISTEXTUPDATE|0}') = '1';

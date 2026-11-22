@@ -12,11 +12,10 @@ Bundled tools and dependencies retain the licenses listed in
 Install `DaisText-Setup.exe`, then open DaisText from the Start menu. The installer
 includes the PDF engine and needs no administrator access or Go installation.
 Open a DAISY folder, `.zip` or `.daisy` archive, uncheck entries to skip, choose a format,
-and choose **Convert selected**. Space toggles a section checkbox. Preview follows
-the highlighted row. **Toggle selected branch** selects or clears a parent and
-all its descendants. A parent's own checkbox affects its introductory text only.
-Selection always exports in the source reading order, with no duplicated parent
-content. Skipped ancestors are omitted; surviving heading levels are normalized.
+and choose **Convert selected**. Clicking a checkbox, pressing Space, or choosing
+**Toggle selected branch** selects or clears the section and its subsections.
+Recheck individual subsections to include them on their own. Preview follows the
+highlighted row. The export follows the source reading order and normalizes heading levels.
 
 On launch, selection, preview and export controls stay hidden until a book loads.
 Settings lets you hide either the folder or ZIP import button, with at least one
@@ -37,10 +36,11 @@ Formats:
   are still needed for a public accessibility claim.
 * `.brf`: optional Liblouis `lou_translate`, ASCII output, cell wrapping and page
   breaks. Select the **Liblouis braille translator and tables** component in the
-  installer for offline export, or configure a separate installation. With blank
-  tool and table settings, the bundled translator uses contracted English UEB and
-  the US BRF display table. Configure another table chain for other languages or
-  conventions (for example `en-us-brf.dis,en-ueb-g2.ctb`). Use absolute
+  installer for offline export, or configure a separate installation. BRF defaults
+  to contracted classic North American English (EBAE). Select contracted Unified
+  English Braille (UEB) in Settings to switch standards. Both presets use the US
+  BRF display table. Choose **Custom** to enter a table chain for other languages
+  or conventions, such as `en-us-brf.dis,en-us-g1.ctb`. Use absolute
   table paths if they are not in Liblouis's data search path. Review translation
   and embossing conventions with the intended reader; this is simple text layout,
   not a full braille publishing/typesetting engine.
@@ -96,6 +96,8 @@ SHA-256 checksums are in `scripts/tools.lock.json`; review both when updating.
 ```powershell
 go test ./...
 go vet ./...
+# Windows GUI regression test, after scripts/build.ps1 embeds the app manifest:
+go test -tags daistext_gui_test ./cmd/daistext
 # Optional private integration test: never add the input book to Git.
 $env:DAISTEXT_TEST_BOOK = 'C:\private\book.zip'
 # Optional comparison against an already extracted private folder:

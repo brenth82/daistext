@@ -68,8 +68,8 @@ func main() {
 		}},
 		Label{AssignTo: &a.welcome, Text: "Open a DAISY folder or ZIP to select sections and convert them.\r\nFor newspaper emails with separate attachments, save the OPF, NCX, SMIL and XML files together in one folder.\r\nYou can hide either Open option in Settings. Converted files default to your Downloads folder."},
 		Composite{AssignTo: &a.bookPanel, Visible: false, Layout: VBox{}, StretchFactor: 1, Children: []Widget{
-			Label{Text: "&Sections (Right and Left expand or collapse, Space toggles inclusion)"},
-			TreeView{AssignTo: &a.tree, Accessibility: Accessibility{Name: "Sections in reading order", Description: "Right and Left expand or collapse branches. Space toggles inclusion."}, OnCurrentItemChanged: a.showPreview, StretchFactor: 3},
+			Label{Text: "&Sections (Right and Left expand or collapse, Space toggles a branch)"},
+			TreeView{AssignTo: &a.tree, Accessibility: Accessibility{Name: "Sections in reading order", Description: "Right and Left expand or collapse branches. Space toggles the section and its subsections."}, OnCurrentItemChanged: a.showPreview, StretchFactor: 3},
 			Composite{Layout: HBox{}, Children: []Widget{PushButton{Text: "Select &all", OnClicked: func() { a.selectAll(true) }}, PushButton{Text: "Select &none", OnClicked: func() { a.selectAll(false) }}, PushButton{Text: "Toggle selected &branch", OnClicked: a.toggleBranch}, HSpacer{}}},
 			CheckBox{AssignTo: &a.reporterCleanup, Text: "Skip &reporter contact details and bios", Visible: false, OnCheckedChanged: a.showPreview},
 			Label{Text: "&Preview of highlighted section:"}, TextEdit{AssignTo: &a.preview, Accessibility: Accessibility{Name: "Section preview"}, ReadOnly: true, VScroll: true, StretchFactor: 2},
@@ -81,7 +81,11 @@ func main() {
 		walk.MsgBox(nil, "DaisText", err.Error(), walk.MsgBoxIconError)
 		return
 	}
-	enableSectionCheckboxes(a.tree)
+	if err := enableSectionCheckboxes(a.tree, func() *sectionsModel { return a.model }); err != nil {
+		a.failure(err)
+		a.mw.Dispose()
+		return
+	}
 	for i, f := range formats {
 		if f == s.Format {
 			a.format.SetCurrentIndex(i)
@@ -203,7 +207,7 @@ func (a *app) load(p string) {
 		}
 		a.convert.SetEnabled(true)
 		a.mw.SetTitle(b.Title + " — DaisText")
-		a.status.SetText(fmt.Sprintf("%d sections loaded. Uncheck sections to omit them. Parent checkboxes control only their own text; use Toggle selected branch for descendants.", len(b.Sections)))
+		a.status.SetText(fmt.Sprintf("%d sections loaded. Uncheck a section to omit it and its subsections.", len(b.Sections)))
 		if len(b.Sections) > 0 {
 			a.tree.SetCurrentItem(m.roots[0])
 			a.showPreview()
@@ -227,9 +231,7 @@ func (a *app) selectAll(v bool) {
 	if a.model == nil {
 		return
 	}
-	for i := range a.model.handles {
-		a.model.setChecked(a.tree, i, v)
-	}
+	a.model.setAllChecked(a.tree, v)
 }
 func (a *app) toggleBranch() {
 	if a.model == nil {
@@ -239,25 +241,13 @@ func (a *app) toggleBranch() {
 	if !ok {
 		return
 	}
-	i := item.index
-	depth := a.model.book.Sections[i].Depth
-	v := !a.model.checked(a.tree, i)
-	a.model.setChecked(a.tree, i, v)
-	for j := i + 1; j < len(a.model.handles) && a.model.book.Sections[j].Depth > depth; j++ {
-		a.model.setChecked(a.tree, j, v)
-	}
+	a.model.toggleBranch(a.tree, item)
 }
 func (a *app) convertBook() {
 	if a.model == nil {
 		return
 	}
-	var ids []int
-	for i := range a.model.handles {
-		if a.model.checked(a.tree, i) {
-			ids = append(ids, i)
-		}
-	}
-	blocks, e := a.model.book.SelectedForExport(ids, a.reporterCleanup.Checked())
+	blocks, e := a.model.book.SelectedForExport(a.model.selectedIDs(a.tree), a.reporterCleanup.Checked())
 	if e != nil {
 		a.failure(e)
 		return
@@ -287,9 +277,22 @@ func (a *app) editSettings() {
 	var dlg *walk.Dialog
 	var auto, showZIP, showFolder *walk.CheckBox
 	var typst, louis, table, folder *walk.LineEdit
+	var braille *walk.ComboBox
+	var customTable *walk.Composite
 	var cells, lines *walk.NumberEdit
 	var save *walk.PushButton
 	s := a.settings
+	const (
+		ebae = iota
+		ueb
+		custom
+	)
+	brailleIndex := ebae
+	if s.Tools.BrailleTable != "" {
+		brailleIndex = custom
+	} else if s.Tools.BrailleStandard == export.BrailleUEB {
+		brailleIndex = ueb
+	}
 	err := (Dialog{AssignTo: &dlg, Title: "DaisText settings", Layout: VBox{}, MinSize: Size{Width: 650, Height: 400}, DefaultButton: &save, Children: []Widget{
 		CheckBox{AssignTo: &auto, Text: "Automatically check for updates at &startup (ask before installing)", Checked: s.AutoUpdate},
 		CheckBox{AssignTo: &showZIP, Text: "Show Open &ZIP", Checked: s.ShowZIPImport},
@@ -297,7 +300,14 @@ func (a *app) editSettings() {
 		Label{Text: "&Default output folder (blank: Downloads):"}, Composite{Layout: HBox{}, Children: []Widget{LineEdit{AssignTo: &folder, Accessibility: Accessibility{Name: "Default output folder"}, Text: s.OutputDirectory}, PushButton{Text: "Browse…", OnClicked: func() { a.pickFolder(dlg, folder) }}, PushButton{Text: "Use Downloads", OnClicked: func() { folder.SetText(settings.DownloadsDirectory()) }}}},
 		Label{Text: "&Typst executable (blank: bundled tool, then PATH):"}, Composite{Layout: HBox{}, Children: []Widget{LineEdit{AssignTo: &typst, Accessibility: Accessibility{Name: "Typst executable"}, Text: s.Tools.TypstPath}, PushButton{Text: "Browse…", OnClicked: func() { a.pickTool(dlg, typst) }}}},
 		Label{Text: "&Liblouis lou_translate executable (blank: bundled tool, then PATH):"}, Composite{Layout: HBox{}, Children: []Widget{LineEdit{AssignTo: &louis, Accessibility: Accessibility{Name: "Liblouis executable"}, Text: s.Tools.LouisPath}, PushButton{Text: "Browse…", OnClicked: func() { a.pickTool(dlg, louis) }}}},
-		Label{Text: "&Braille table chain (blank: bundled UEB contracted English):"}, LineEdit{AssignTo: &table, Accessibility: Accessibility{Name: "Braille table chain"}, Text: s.Tools.BrailleTable},
+		Label{Text: "&Braille translation:"},
+		ComboBox{AssignTo: &braille, Accessibility: Accessibility{Name: "Braille translation"},
+			Model:        []string{"Classic North American English (EBAE, contracted)", "Unified English Braille (UEB, contracted)", "Custom"},
+			CurrentIndex: brailleIndex},
+		Composite{AssignTo: &customTable, Visible: brailleIndex == custom, Layout: VBox{MarginsZero: true}, Children: []Widget{
+			Label{Text: "Custom braille table chai&n:"},
+			LineEdit{AssignTo: &table, Accessibility: Accessibility{Name: "Custom braille table chain"}, Text: s.Tools.BrailleTable},
+		}},
 		Composite{Layout: Grid{Columns: 4}, Children: []Widget{Label{Text: "&Cells per line:"}, NumberEdit{AssignTo: &cells, Accessibility: Accessibility{Name: "Cells per line"}, Value: float64(s.Tools.CellsPerLine), MinValue: 10, MaxValue: 120, Decimals: 0}, Label{Text: "Lines per &page:"}, NumberEdit{AssignTo: &lines, Accessibility: Accessibility{Name: "Lines per page"}, Value: float64(s.Tools.LinesPerPage), MinValue: 5, MaxValue: 100, Decimals: 0}}},
 		Label{Text: "PDF requires Typst 0.14+. BRF requires Liblouis and tables; translation runs locally.\r\nManual update checks remain available when automatic checks are off."},
 		Composite{Layout: HBox{}, Children: []Widget{HSpacer{}, PushButton{AssignTo: &save, Text: "&Save", OnClicked: func() {
@@ -323,7 +333,19 @@ func (a *app) editSettings() {
 			}
 			s.Tools.TypstPath = strings.TrimSpace(typst.Text())
 			s.Tools.LouisPath = strings.TrimSpace(louis.Text())
-			s.Tools.BrailleTable = strings.TrimSpace(table.Text())
+			s.Tools.BrailleStandard = ""
+			s.Tools.BrailleTable = ""
+			switch braille.CurrentIndex() {
+			case ueb:
+				s.Tools.BrailleStandard = export.BrailleUEB
+			case custom:
+				s.Tools.BrailleTable = strings.TrimSpace(table.Text())
+				if s.Tools.BrailleTable == "" {
+					walk.MsgBox(dlg, "DaisText settings", "Enter a custom braille table chain.", walk.MsgBoxOK|walk.MsgBoxIconError)
+					table.SetFocus()
+					return
+				}
+			}
 			s.Tools.CellsPerLine = int(cells.Value())
 			s.Tools.LinesPerPage = int(lines.Value())
 			if e := settings.Save(s); e != nil {
@@ -340,6 +362,9 @@ func (a *app) editSettings() {
 		a.failure(err)
 		return
 	}
+	braille.CurrentIndexChanged().Attach(func() {
+		customTable.SetVisible(braille.CurrentIndex() == custom)
+	})
 	dlg.Run()
 }
 func (a *app) pickFolder(owner walk.Form, edit *walk.LineEdit) {

@@ -17,8 +17,11 @@ import (
 
 type Options struct {
 	TypstPath, LouisPath, BrailleTable string
+	BrailleStandard                    string `json:",omitempty"`
 	CellsPerLine, LinesPerPage         int
 }
+
+const BrailleUEB = "ueb"
 
 func Text(blocks []daisy.Block) string {
 	var b strings.Builder
@@ -161,10 +164,16 @@ func Write(ctx context.Context, dest, format, title, lang string, blocks []daisy
 		args := []string{"--forward"}
 		if o.BrailleTable != "" {
 			args = append(args, o.BrailleTable)
-		} else if _, e := os.Stat(filepath.Join(tables, "en-ueb-g2.ctb")); e == nil {
-			args = append(args, "--display-table", filepath.Join(tables, "en-us-brf.dis"), filepath.Join(tables, "en-ueb-g2.ctb"))
 		} else {
-			args = append(args, "--display-table", "en-us-brf.dis", "en-ueb-g2.ctb")
+			table, display := "en-us-g2.ctb", "en-us-brf.dis"
+			if o.BrailleStandard == BrailleUEB {
+				table = "en-ueb-g2.ctb"
+			}
+			if _, e := os.Stat(filepath.Join(tables, table)); e == nil {
+				table = filepath.Join(tables, table)
+				display = filepath.Join(tables, display)
+			}
+			args = append(args, "--display-table", display, table)
 		}
 		cmd := exec.CommandContext(cctx, p, args...)
 		if _, e := os.Stat(tables); e == nil {

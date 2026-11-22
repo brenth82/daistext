@@ -109,6 +109,36 @@ func TestLiblouisIntegration(t *testing.T) {
 	}
 }
 
+func TestLiblouisBrailleChoices(t *testing.T) {
+	louis := os.Getenv("DAISTEXT_TEST_LOUIS")
+	if louis == "" {
+		t.Skip("set DAISTEXT_TEST_LOUIS to test the real translator")
+	}
+	for _, tc := range []struct {
+		name, standard, table, want string
+	}{
+		{name: "default EBAE", want: `6! /ORE & 96! H\SE`},
+		{name: "UEB", standard: BrailleUEB, want: `TO ! /ORE & 9TO ! H\SE`},
+		{name: "saved custom chain", table: "en-us-brf.dis,en-us-g1.ctb", want: "TO THE STORE AND INTO THE HOUSE"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dest := filepath.Join(t.TempDir(), "braille.brf")
+			blocks := []daisy.Block{{Text: "to the store and into the house"}}
+			options := Options{LouisPath: louis, BrailleStandard: tc.standard, BrailleTable: tc.table}
+			if err := Write(context.Background(), dest, "brf", "Test", "en", blocks, options); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(dest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.TrimSpace(string(data)); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCanceledPDFLeavesNoTemporarySource(t *testing.T) {
 	typst := os.Getenv("DAISTEXT_TEST_TYPST")
 	if typst == "" {

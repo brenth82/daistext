@@ -2,6 +2,20 @@
 param([string]$Version = '0.1.0', [string]$UpdatePublicKey = $env:DAISTEXT_UPDATE_PUBLIC_KEY, [string]$InnoCompiler)
 $ErrorActionPreference = 'Stop'
 & "$PSScriptRoot/build.ps1" -Version $Version -UpdatePublicKey $UpdatePublicKey -WithTools
+
+function Write-ToolManifest([string]$Source, [string]$Manifest) {
+    $root = (Resolve-Path -LiteralPath $Source).Path
+    $entries = Get-ChildItem -LiteralPath $root -File -Recurse | ForEach-Object {
+        $relativePath = $_.FullName.Substring($root.Length + 1)
+        $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+        "$hash $relativePath"
+    }
+    Set-Content -LiteralPath $Manifest -Value $entries -Encoding UTF8
+}
+
+Write-ToolManifest 'dist/tools' 'dist/typst-files.txt'
+Write-ToolManifest 'dist/liblouis' 'dist/liblouis-files.txt'
+
 $compiler = $InnoCompiler
 if (-not $compiler) {
     $candidates = @(
