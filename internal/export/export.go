@@ -13,11 +13,13 @@ import (
 	"time"
 
 	"github.com/brenth82/daistext/internal/daisy"
+	"github.com/brenth82/daistext/internal/speech"
 )
 
 type Options struct {
 	TypstPath, LouisPath, BrailleTable string
 	BrailleStandard                    string `json:",omitempty"`
+	NormalizeForSpeech                 bool   `json:",omitempty"`
 	CellsPerLine, LinesPerPage         int
 }
 
@@ -100,6 +102,17 @@ func Write(ctx context.Context, dest, format, title, lang string, blocks []daisy
 	}
 	format = strings.ToLower(format)
 	blocks = normalizeHeadings(blocks)
+	switch format {
+	case "txt", "md", "html", "pdf":
+		if o.NormalizeForSpeech && speech.SupportsLanguage(lang) {
+			for i := range blocks {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				blocks[i].Text = speech.Normalize(blocks[i].Text)
+			}
+		}
+	}
 	tmp, e := os.CreateTemp(filepath.Dir(dest), ".daistext-*")
 	if e != nil {
 		return e

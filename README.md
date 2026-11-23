@@ -55,10 +55,18 @@ are rooted at the selected directory, and symbolic links are rejected.
 
 Settings are stored per user at `%APPDATA%\DaisText\settings.json`. Settings
 includes import button visibility, default output folder, PDF/BRF tool paths,
-braille tables and page size, and automatic update checks. The output default is
+braille tables and page size, speech normalization, and automatic update checks. The output default is
 the current user's Windows Downloads Known Folder, including redirected folders.
 Change it using Settings, Browse or Use Downloads. Saving a particular conversion
 elsewhere does not change that configured default.
+
+For text-to-speech tools, enable **Normalize English exports for speech** in
+Settings. It is off by default and applies to English TXT, Markdown, HTML, and
+PDF exports. For example, `Dr. Lee paid $1.50` becomes
+`Doctor Lee paid one dollar and fifty cents`. The rules also expand dates, times,
+phone numbers, email addresses, and common initialisms. The CLI uses the saved
+setting and accepts `-normalize-for-speech` or `-normalize-for-speech=false` to
+override it for one export.
 
 Uninstall removes DaisText settings, staged update installers, conversion cache, bundled tools,
 shortcuts and its installer registration. Source books, exported documents, and

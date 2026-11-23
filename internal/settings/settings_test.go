@@ -19,7 +19,7 @@ func TestDefaultsAndLegacySettings(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if !s.ShowZIPImport || !s.ShowFolderImport || s.OutputDirectory != DownloadsDirectory() || !filepath.IsAbs(s.OutputDirectory) {
+	if !s.ShowZIPImport || !s.ShowFolderImport || s.Tools.NormalizeForSpeech || s.OutputDirectory != DownloadsDirectory() || !filepath.IsAbs(s.OutputDirectory) {
 		t.Fatalf("bad defaults: %+v", s)
 	}
 	p, e := Path()
@@ -36,7 +36,7 @@ func TestDefaultsAndLegacySettings(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if s.AutoUpdate || !s.ShowZIPImport || !s.ShowFolderImport || s.OutputDirectory != DownloadsDirectory() {
+	if s.AutoUpdate || !s.ShowZIPImport || !s.ShowFolderImport || s.Tools.NormalizeForSpeech || s.OutputDirectory != DownloadsDirectory() {
 		t.Fatalf("legacy settings migration failed: %+v", s)
 	}
 }
@@ -46,6 +46,7 @@ func TestPreferencesPersist(t *testing.T) {
 	s := Default()
 	s.ShowZIPImport = false
 	s.AutoUpdate = false
+	s.Tools.NormalizeForSpeech = true
 	s.OutputDirectory = t.TempDir()
 	if e := Save(s); e != nil {
 		t.Fatal(e)
@@ -54,7 +55,7 @@ func TestPreferencesPersist(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if got.ShowZIPImport || got.AutoUpdate || got.OutputDirectory != s.OutputDirectory {
+	if got.ShowZIPImport || got.AutoUpdate || !got.Tools.NormalizeForSpeech || got.OutputDirectory != s.OutputDirectory {
 		t.Fatalf("preferences did not persist: %+v", got)
 	}
 }

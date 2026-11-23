@@ -275,7 +275,7 @@ func (a *app) convertBook() {
 }
 func (a *app) editSettings() {
 	var dlg *walk.Dialog
-	var auto, showZIP, showFolder *walk.CheckBox
+	var auto, showZIP, showFolder, normalizeForSpeech *walk.CheckBox
 	var typst, louis, table, folder *walk.LineEdit
 	var braille *walk.ComboBox
 	var customTable *walk.Composite
@@ -297,6 +297,7 @@ func (a *app) editSettings() {
 		CheckBox{AssignTo: &auto, Text: "Automatically check for updates at &startup (ask before installing)", Checked: s.AutoUpdate},
 		CheckBox{AssignTo: &showZIP, Text: "Show Open &ZIP", Checked: s.ShowZIPImport},
 		CheckBox{AssignTo: &showFolder, Text: "Show Open DAISY &folder", Checked: s.ShowFolderImport},
+		CheckBox{AssignTo: &normalizeForSpeech, Text: "Normalize English exports for &speech (TXT, Markdown, HTML, PDF)", Checked: s.Tools.NormalizeForSpeech},
 		Label{Text: "&Default output folder (blank: Downloads):"}, Composite{Layout: HBox{}, Children: []Widget{LineEdit{AssignTo: &folder, Accessibility: Accessibility{Name: "Default output folder"}, Text: s.OutputDirectory}, PushButton{Text: "Browse…", OnClicked: func() { a.pickFolder(dlg, folder) }}, PushButton{Text: "Use Downloads", OnClicked: func() { folder.SetText(settings.DownloadsDirectory()) }}}},
 		Label{Text: "&Typst executable (blank: bundled tool, then PATH):"}, Composite{Layout: HBox{}, Children: []Widget{LineEdit{AssignTo: &typst, Accessibility: Accessibility{Name: "Typst executable"}, Text: s.Tools.TypstPath}, PushButton{Text: "Browse…", OnClicked: func() { a.pickTool(dlg, typst) }}}},
 		Label{Text: "&Liblouis lou_translate executable (blank: bundled tool, then PATH):"}, Composite{Layout: HBox{}, Children: []Widget{LineEdit{AssignTo: &louis, Accessibility: Accessibility{Name: "Liblouis executable"}, Text: s.Tools.LouisPath}, PushButton{Text: "Browse…", OnClicked: func() { a.pickTool(dlg, louis) }}}},
@@ -314,6 +315,7 @@ func (a *app) editSettings() {
 			s.AutoUpdate = auto.Checked()
 			s.ShowZIPImport = showZIP.Checked()
 			s.ShowFolderImport = showFolder.Checked()
+			s.Tools.NormalizeForSpeech = normalizeForSpeech.Checked()
 			s.OutputDirectory = strings.TrimSpace(folder.Text())
 			if s.OutputDirectory == "" {
 				s.OutputDirectory = settings.DownloadsDirectory()

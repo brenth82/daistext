@@ -373,6 +373,17 @@ func Open(filename string) (*Book, error) {
 		if t := n.all("title"); len(t) > 0 {
 			b.Title = t[0].content()
 		}
+		if roots := n.all("html"); len(roots) > 0 {
+			if lang := strings.TrimSpace(roots[0].attrs["lang"]); lang != "" {
+				b.Language = lang
+			}
+		}
+		for _, meta := range n.all("meta") {
+			if lang := strings.TrimSpace(meta.attrs["content"]); strings.EqualFold(meta.attrs["name"], "dc:language") && lang != "" {
+				b.Language = lang
+				break
+			}
+		}
 		var visit func(*node) error
 		visit = func(n *node) error {
 			if len(n.tag) == 2 && n.tag[0] == 'h' && n.tag[1] >= '1' && n.tag[1] <= '6' {

@@ -18,6 +18,7 @@ func main() {
 	format := flag.String("format", "txt", "txt, md, html, pdf, brf")
 	list := flag.Bool("list", false, "list sections with zero-based indices")
 	selection := flag.String("sections", "all", "comma-separated indices (output remains in book order)")
+	normalizeForSpeech := flag.Bool("normalize-for-speech", false, "normalize English TXT, Markdown, HTML, and PDF exports for text to speech (defaults to the saved setting)")
 	flag.Parse()
 	b, e := daisy.Open(*input)
 	must(e)
@@ -44,6 +45,11 @@ func main() {
 	must(e)
 	s, e := settings.Load()
 	must(e)
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "normalize-for-speech" {
+			s.Tools.NormalizeForSpeech = *normalizeForSpeech
+		}
+	})
 	if *out == "" {
 		must(fmt.Errorf("provide -output"))
 	}

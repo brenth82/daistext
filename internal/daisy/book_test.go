@@ -126,12 +126,12 @@ func TestRejectTraversalAndExternalResources(t *testing.T) {
 	}
 }
 func TestDaisy202(t *testing.T) {
-	p := fixture(t, map[string]string{"ncc.html": `<html><head><title>Older book</title></head><body><h1><a href="a.smil#p">First</a></h1><h1><a href="b.smil#p">Second</a></h1></body></html>`, "a.smil": `<smil><par id="p"><text src="text.html#a"/></par></smil>`, "b.smil": `<smil><par id="p"><text src="text.html#b"/></par></smil>`, "text.html": `<html><body><p id="a">one</p><p id="b">two</p></body></html>`})
+	p := fixture(t, map[string]string{"ncc.html": `<html lang="en"><head><title>Older book</title><meta name="dc:language" content="fr"></head><body><h1><a href="a.smil#p">First</a></h1><h1><a href="b.smil#p">Second</a></h1></body></html>`, "a.smil": `<smil><par id="p"><text src="text.html#a"/></par></smil>`, "b.smil": `<smil><par id="p"><text src="text.html#b"/></par></smil>`, "text.html": `<html><body><p id="a">one</p><p id="b">two</p></body></html>`})
 	b, e := Open(p)
 	if e != nil {
 		t.Fatal(e)
 	}
-	if b.Title != "Older book" || len(b.Sections) != 2 || b.Sections[1].Blocks[0].Text != "two" {
+	if b.Title != "Older book" || b.Language != "fr" || len(b.Sections) != 2 || b.Sections[1].Blocks[0].Text != "two" {
 		t.Fatalf("%+v", b)
 	}
 }

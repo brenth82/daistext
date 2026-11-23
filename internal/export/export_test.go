@@ -38,6 +38,38 @@ func TestFailedConversionPreservesOutput(t *testing.T) {
 		t.Fatal(string(b))
 	}
 }
+
+func TestSpeechNormalizationInExports(t *testing.T) {
+	blocks := []daisy.Block{{Text: "CHAPTER IV", Level: 3}, {Text: "Dr. Lee paid $1 & left."}}
+	for _, tc := range []struct {
+		name, format, language, want string
+		enabled                      bool
+	}{
+		{"text", "TXT", "eng", "Chapter fourth\r\n\r\nDoctor Lee paid one dollar and left.", true},
+		{"markdown", "md", "en-US", "# Chapter fourth\n\nDoctor Lee paid one dollar and left\\.", true},
+		{"html", "html", "en", "<h1>Chapter fourth</h1>\n<p>Doctor Lee paid one dollar and left.</p>", true},
+		{"opted out", "txt", "en", "CHAPTER IV\r\n\r\nDr. Lee paid $1 & left.", false},
+		{"other language", "txt", "fr", "CHAPTER IV\r\n\r\nDr. Lee paid $1 & left.", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dest := filepath.Join(t.TempDir(), "selected."+tc.format)
+			options := Options{NormalizeForSpeech: tc.enabled}
+			if err := Write(context.Background(), dest, tc.format, "Book", tc.language, blocks, options); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(dest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(data), tc.want) {
+				t.Fatalf("got %q, want output containing %q", data, tc.want)
+			}
+		})
+	}
+	if blocks[0] != (daisy.Block{Text: "CHAPTER IV", Level: 3}) || blocks[1].Text != "Dr. Lee paid $1 & left." {
+		t.Fatal("export changed the source blocks")
+	}
+}
 func TestBRFPagination(t *testing.T) {
 	s := paginate("ABCDEFGHIJK\nsecond\nthird\nfourth\nfifth\nsixth", 10, 5)
 	if !strings.Contains(s, "ABCDEFGHIJ\r\nK\r\n") || !strings.Contains(s, "\f") {
