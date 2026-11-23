@@ -73,8 +73,9 @@ shortcuts and its installer registration. Source books, exported documents, and
 separately installed translators are preserved. Windows may retain its own
 installation/security history; DaisText does not erase operating-system records.
 To reset settings without uninstalling,
-close DaisText and remove that file. Update installers use
-`%LOCALAPPDATA%\DaisText\updates`; these files can be removed after installation.
+close DaisText and remove that file. DaisText removes its cached installer after
+it reopens following an in-app update. It also clears old cached installers from
+`%LOCALAPPDATA%\DaisText\updates` on startup.
 PDF conversion workspaces use `%LOCALAPPDATA%\DaisText\temp` and are deleted after
 conversion or cancellation. Uninstall also removes workspaces abandoned by a crash.
 

@@ -51,7 +51,7 @@ Name: "{group}\Uninstall DaisText"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\DaisText"; Filename: "{app}\DaisText.exe"; Tasks: desktopicon
 [Run]
 Filename: "{app}\DaisText.exe"; Description: "Open DaisText"; Flags: nowait postinstall skipifsilent
-Filename: "{app}\DaisText.exe"; Flags: nowait; Check: IsUpdate
+Filename: "{app}\DaisText.exe"; Parameters: "--completed-update ""{srcexe}"""; Flags: nowait; Check: IsUpdate
 
 [UninstallDelete]
 ; Delete only DaisText-owned settings/cache locations, never output or input paths.

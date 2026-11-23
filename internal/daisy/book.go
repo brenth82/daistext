@@ -81,6 +81,11 @@ func (n *node) content() string {
 	return strings.Join(strings.Fields(b.String()), " ")
 }
 func decode(data []byte, isHTML bool) (*node, error) {
+	// Some DAISY XML producers embed NUL padding in the text. Drop it before
+	// decoding so the surrounding text survives and XML structure is still checked.
+	if !isHTML && bytes.IndexByte(data, 0) >= 0 {
+		data = bytes.ReplaceAll(data, []byte{0}, nil)
+	}
 	// Honor an actual legacy declaration. For mislabeled UTF-8, repair only
 	// invalid bytes so valid Unicode elsewhere in the book is preserved.
 	decl := encodingDeclaration.FindSubmatch(data)

@@ -95,9 +95,13 @@ func main() {
 	if loadErr != nil {
 		a.failure(loadErr)
 	}
-	if len(os.Args) > 1 {
+	var completedInstaller string
+	if len(os.Args) == 3 && os.Args[1] == "--completed-update" {
+		completedInstaller = os.Args[2]
+	} else if len(os.Args) > 1 {
 		a.load(os.Args[1])
 	}
+	a.startWorker(func() { update.CleanupInstallers(a.ctx, completedInstaller) })
 	if s.AutoUpdate && update.PublicKey != "" {
 		a.startWorker(func() {
 			select {
@@ -423,6 +427,7 @@ func (a *app) checkUpdates(manual bool) {
 			a.background("Downloading and verifying the update…", func() error { var e error; installer, e = update.Download(a.ctx, *m); return e }, func() {
 				cmd := exec.Command(installer, "/SP-", "/SILENT", "/NORESTART", "/CURRENTUSER", "/DAISTEXTUPDATE=1")
 				if e := cmd.Start(); e != nil {
+					os.Remove(installer)
 					a.failure(e)
 					return
 				}

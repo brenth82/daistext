@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -66,6 +67,23 @@ func TestFolderAndZIPImportMatch(t *testing.T) {
 	after, _ := os.ReadDir(dir)
 	if len(before) != len(after) {
 		t.Fatal("import wrote files into the source folder")
+	}
+}
+
+func TestImportRepairsNULPadding(t *testing.T) {
+	files := synthetic()
+	files["book.xml"] = strings.Replace(files["book.xml"], "Alpha &amp; omega.", "Caf\x00é &amp; \x00\x00omega.", 1)
+	book, err := Open(fixture(t, files))
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected, err := book.Selected([]int{1, 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Block{{Text: "First", Level: 2}, {Text: "Café & omega."}, {Text: "Second", Level: 2}, {Text: "Beta."}}
+	if !reflect.DeepEqual(selected, want) {
+		t.Fatalf("selected blocks = %+v, want %+v", selected, want)
 	}
 }
 

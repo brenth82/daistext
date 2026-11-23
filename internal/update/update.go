@@ -169,11 +169,11 @@ func Download(ctx context.Context, m Manifest) (string, error) {
 	if e != nil {
 		return "", e
 	}
-	dir = filepath.Join(dir, "DaisText", "updates")
+	dir = filepath.Join(dir, installerCache)
 	if e = os.MkdirAll(dir, 0700); e != nil {
 		return "", e
 	}
-	f, e := os.CreateTemp(dir, "DaisText-Setup-*.exe")
+	f, e := os.CreateTemp(dir, installerPrefix+"*"+installerSuffix)
 	if e != nil {
 		return "", e
 	}
