@@ -1,0 +1,69 @@
+name: Check Windows update manifest expiry
+on:
+  schedule:
+    - cron: '43 15 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: check-windows-update-expiry
+  cancel-in-progress: false
+jobs:
+  check:
+    if: github.repository == 'brenth82/daistext' && github.ref == 'refs/heads/master'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    outputs:
+      release_tag: ${{ steps.expiry.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: '1.27.x'
+          cache: false
+      - name: Verify published expiry and check the seven-day window
+        id: expiry
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GOTOOLCHAIN: local
+        run: |
+          $tag = gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" --jq .tag_name
+          if ($LASTEXITCODE -or $tag -cnotmatch '^v[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}$') { throw 'Could not identify the latest numeric release' }
+          Invoke-WebRequest -Uri "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/update.json" -OutFile update.json -TimeoutSec 60
+          $expiry = go run ./cmd/release-sign -inspect-published "-version=$($tag.Substring(1))" '-installer=' -output update.json
+          if ($LASTEXITCODE) { throw 'Could not verify the published manifest' }
+          Write-Host "The signed manifest for $tag expires at $expiry."
+          if ([DateTimeOffset]::Parse($expiry) -le [DateTimeOffset]::UtcNow.AddDays(7)) {
+            "release_tag=$tag" >> $env:GITHUB_OUTPUT
+          }
+
+  dispatch:
+    needs: check
+    if: needs.check.outputs.release_tag != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Request approval from the protected maintenance tag
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.check.outputs.release_tag }}
+        run: |
+          $workflow = 'refresh-update.yml'
+          $maintenanceTag = 'v0.0.0-manifest.1'
+          $runs = gh run list --repo $env:GITHUB_REPOSITORY --workflow $workflow --branch $maintenanceTag --event workflow_dispatch --limit 20 --json status,url,displayTitle
+          if ($LASTEXITCODE) { throw 'Could not check whether a refresh is already active' }
+          $active = $runs | ConvertFrom-Json | Where-Object {
+            $_.status -ne 'completed' -and $_.displayTitle -ceq "Refresh update manifest for $env:RELEASE_TAG"
+          } | Select-Object -First 1
+          if ($active) {
+            Write-Host "A refresh is already active at $($active.url)."
+            return
+          }
+          gh workflow run $workflow --repo $env:GITHUB_REPOSITORY --ref $maintenanceTag -f "release_tag=$env:RELEASE_TAG"
+          if ($LASTEXITCODE) { throw 'Could not dispatch the manifest refresh' }

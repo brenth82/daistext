@@ -38,6 +38,40 @@ The signing job checks its protected public key against the reviewed trust file.
 The publish job verifies the signature and installer hash again without a private
 key. No publication happens merely from configuring the environment.
 
+## Refreshing update metadata
+
+The expiry check runs daily on `master`. It verifies the published signature
+and requests a refresh when the latest release has at most seven days left. A
+recent release or refresh starts a new 30-day window. An active refresh already
+awaiting approval suppresses duplicate requests.
+
+To activate this on a repository that already has a release, push the reviewed
+workflows to `master`, then create and push the annotated maintenance tag
+`v0.0.0-manifest.1` at that same reviewed commit. The tag matches the existing
+protection rules and the installer workflow accepts only numeric release tags.
+The maintenance tag does not require a new installer. Future changes to the
+tagged refresh workflow require a new maintenance tag and corresponding changes
+to both workflow references. Review the tagged workflow before approving it.
+
+For an on-demand refresh, run the workflow against the maintenance tag with the
+latest published release tag as input:
+
+```powershell
+gh workflow run refresh-update.yml --ref v0.0.0-manifest.1 -f release_tag=v0.1.5
+```
+
+Open the [refresh runs](https://github.com/brenth82/daistext/actions/workflows/refresh-update.yml).
+Check the release and manifest expiry reported by the verification job, then
+approve the protected `release` environment as for an installer release. The
+signing job verifies the existing signature and installer hash before renewing
+the expiry. An independent job stages and verifies the replacement before
+swapping `update.json`. The installer is reused byte-for-byte.
+
+If GitHub disables scheduled runs after inactivity, re-enable the expiry
+workflow from its Actions page or use the on-demand refresh. If publication is
+interrupted during the swap, restore the `update-previous-*.json` backup to
+`update.json` if the canonical asset is missing, then rerun the refresh.
+
 ## Local signing and recovery
 
 The publisher key was generated with Go's cryptographic random source. Provisioning

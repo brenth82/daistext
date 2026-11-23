@@ -1,0 +1,126 @@
+name: Refresh Windows update manifest
+run-name: Refresh update manifest for ${{ inputs.release_tag || 'maintenance setup' }}
+on:
+  push:
+    tags: ['v0.0.0-manifest.1']
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Latest published DaisText release tag
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: refresh-windows-update-manifest-${{ inputs.release_tag }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    name: Verify the published installer and manifest
+    # The tag push registers this workflow for dispatches without starting a refresh.
+    if: github.repository == 'brenth82/daistext' && github.ref == 'refs/tags/v0.0.0-manifest.1' && github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    outputs:
+      previous_hash: ${{ steps.verify.outputs.previous_hash }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: '1.27.x'
+          cache: false
+      - name: Download and check both existing assets
+        id: verify
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          GOTOOLCHAIN: local
+        run: |
+          if ($env:RELEASE_TAG -cnotmatch '^v[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}$') { throw 'Expected a numeric release tag' }
+          $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" | ConvertFrom-Json
+          if ($LASTEXITCODE -or $release.tag_name -cne $env:RELEASE_TAG -or $release.immutable -ne $false) { throw 'Refresh requires the latest published release with replaceable assets' }
+          $base = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG"
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Invoke-WebRequest -Uri "$base/update.json" -OutFile dist/previous.json -TimeoutSec 60
+          Invoke-WebRequest -Uri "$base/DaisText-Setup.exe" -OutFile dist/DaisText-Setup.exe -TimeoutSec 120
+          $expiry = go run ./cmd/release-sign -inspect-published "-version=$($env:RELEASE_TAG.Substring(1))" -output dist/previous.json
+          if ($LASTEXITCODE) { throw 'The published installer did not match its signed manifest' }
+          $previousHash = (Get-FileHash -LiteralPath dist/previous.json).Hash
+          "previous_hash=$previousHash" >> $env:GITHUB_OUTPUT
+          "Verified the released installer for **$env:RELEASE_TAG**. Its signed manifest expires at **$expiry**." >> $env:GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: published-update
+          path: |
+            dist/DaisText-Setup.exe
+            dist/previous.json
+          if-no-files-found: error
+          retention-days: 30
+
+  sign:
+    name: Approve and renew the signature on an isolated runner
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 10
+    environment: release
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: '1.27.x'
+          cache: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: published-update
+          path: dist
+      - name: Sign a new manifest for the verified installer
+        shell: pwsh
+        env:
+          DAISTEXT_UPDATE_PRIVATE_KEY: ${{ secrets.DAISTEXT_UPDATE_PRIVATE_KEY }}
+          DAISTEXT_UPDATE_PUBLIC_KEY: ${{ vars.DAISTEXT_UPDATE_PUBLIC_KEY }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          GOTOOLCHAIN: local
+        run: |
+          $pinned = (Get-Content release/update-public-key.txt -Raw).Trim()
+          if ($pinned -cne $env:DAISTEXT_UPDATE_PUBLIC_KEY) { throw 'Protected trust key differs from the reviewed source' }
+          go run ./cmd/release-sign "-version=$($env:RELEASE_TAG.Substring(1))" -refresh-from dist/previous.json
+          if ($LASTEXITCODE) { throw 'Manifest refresh signing failed' }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: renewed-manifest
+          path: dist/update.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Verify and replace only the signed manifest
+    needs: [prepare, sign]
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: '1.27.x'
+          cache: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: renewed-manifest
+          path: dist
+      - name: Verify the current public assets and publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          PREVIOUS_HASH: ${{ needs.prepare.outputs.previous_hash }}
+          GOTOOLCHAIN: local
+        run: ./release/publish-refresh.ps1

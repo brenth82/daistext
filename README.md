@@ -149,9 +149,10 @@ After confirmation, installation shows progress and reopens DaisText when done.
 Development builds with no public key never
 silently trust a downloaded manifest and explain that updates are unconfigured.
 
-Publish a new signed manifest at least every 30 days, even if re-signing the
-current release, or clients will correctly reject stale metadata. Keep the public
-key stable across releases. Key rotation requires a separately trusted installer;
+The [manifest refresh workflow](release/README.md#refreshing-update-metadata)
+can renew the current release's signed metadata after publisher approval.
+Clients reject expired metadata. Keep the public key stable across releases.
+Key rotation requires a separately trusted installer;
 there is no remote trust-key replacement endpoint. A compromised release host can
 block updates but cannot produce an authenticated installer without the private
 key. Compromise of the signing environment/key remains a critical risk.
